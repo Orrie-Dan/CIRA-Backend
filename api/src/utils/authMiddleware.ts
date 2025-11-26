@@ -10,8 +10,8 @@ declare module '@fastify/jwt' {
 
 // Type helper for accessing the authenticated user from request
 type AuthenticatedRequest = FastifyRequest & {
-  user?: JWTPayload
-}
+    user?: JWTPayload
+  }
 
 // Helper function to safely get user from request
 function getUser(request: FastifyRequest): JWTPayload | undefined {

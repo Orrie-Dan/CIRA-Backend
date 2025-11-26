@@ -4,7 +4,6 @@ import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import cookie from '@fastify/cookie'
 import multipart from '@fastify/multipart'
-import staticFiles from '@fastify/static'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import { reportsRoutes } from './routes/reports.js'
@@ -127,11 +126,11 @@ await app.register(multipart, {
   },
 })
 
-// Static file serving for uploaded photos
-await app.register(staticFiles, {
-  root: path.join(__dirname, '../uploads'),
-  prefix: '/uploads/',
-})
+// Static file serving removed - using Cloudinary for image storage
+// await app.register(staticFiles, {
+//   root: path.join(__dirname, '../uploads'),
+//   prefix: '/uploads/',
+// })
 
 // Error handler
 app.setErrorHandler((error, request, reply) => {

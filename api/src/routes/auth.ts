@@ -19,19 +19,8 @@ import {
 } from '../utils/otp.js'
 import { sendOTPViaEmail } from '../utils/email.js'
 import { sendOTPViaSMS } from '../utils/sms.js'
-import path from 'path'
-import fs from 'fs/promises'
-import { fileURLToPath } from 'url'
 import sharp from 'sharp'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Ensure avatars directory exists
-const avatarsDir = path.join(__dirname, '../../uploads/avatars')
-fs.mkdir(avatarsDir, { recursive: true }).catch(() => {
-  // Directory creation will be handled on first upload
-})
+import { uploadToCloudinary, deleteFromCloudinary, extractPublicId } from '../utils/cloudinary.js'
 
 export async function authRoutes(app: FastifyInstance) {
   // Register new user
@@ -483,9 +472,6 @@ export async function authRoutes(app: FastifyInstance) {
         })
       }
 
-      // Ensure avatars directory exists
-      await fs.mkdir(avatarsDir, { recursive: true })
-
       // Resize image to 200x200px using sharp
       const resizedBuffer = await sharp(buffer)
         .resize(200, 200, {
@@ -495,34 +481,38 @@ export async function authRoutes(app: FastifyInstance) {
         .jpeg({ quality: 85 })
         .toBuffer()
 
-      // Generate unique filename
-      const filename = `${userId}-${Date.now()}.jpg`
-      const filepath = path.join(avatarsDir, filename)
-
-      // Save file
-      await fs.writeFile(filepath, resizedBuffer)
-
-      // Delete old avatar if exists
+      // Delete old avatar from Cloudinary if exists
       const user = await prisma.userAccount.findUnique({
         where: { id: userId },
         select: { avatarUrl: true },
       })
 
       if (user?.avatarUrl) {
-        const oldFilename = path.basename(user.avatarUrl)
-        const oldFilepath = path.join(avatarsDir, oldFilename)
-        try {
-          await fs.unlink(oldFilepath)
-        } catch (err) {
-          app.log.warn(err, 'Failed to delete old avatar file')
+        const oldPublicId = extractPublicId(user.avatarUrl)
+        if (oldPublicId) {
+          try {
+            await deleteFromCloudinary(oldPublicId)
+          } catch (err) {
+            app.log.warn(err, 'Failed to delete old avatar from Cloudinary')
+          }
         }
       }
+
+      // Upload to Cloudinary
+      const uploadResult = await uploadToCloudinary(resizedBuffer, 'avatars', {
+        resource_type: 'image',
+        transformation: [
+          { width: 200, height: 200, crop: 'fill', gravity: 'face' },
+          { quality: 'auto' },
+          { fetch_format: 'auto' },
+        ],
+      })
 
       // Update user avatar URL in database
       const updatedUser = await prisma.userAccount.update({
         where: { id: userId },
         data: {
-          avatarUrl: `/uploads/avatars/${filename}`,
+          avatarUrl: uploadResult.secure_url, // Use secure_url (HTTPS)
         },
         select: {
           id: true,

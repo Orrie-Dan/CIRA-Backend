@@ -1,18 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { prisma } from '../prisma.js'
 import { ApiError } from '../utils/errors.js'
-import path from 'path'
-import fs from 'fs/promises'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../uploads')
-fs.mkdir(uploadsDir, { recursive: true }).catch(() => {
-  // Directory creation will be handled on first upload
-})
+import { uploadToCloudinary, deleteFromCloudinary, extractPublicId } from '../utils/cloudinary.js'
 
 export async function photosRoutes(app: FastifyInstance) {
   // Upload photo for a report
@@ -83,22 +72,20 @@ export async function photosRoutes(app: FastifyInstance) {
         })
       }
 
-      // Ensure uploads directory exists
-      await fs.mkdir(uploadsDir, { recursive: true })
+      // Upload to Cloudinary
+      const uploadResult = await uploadToCloudinary(buffer, `reports/${reportId}`, {
+        resource_type: 'image',
+        transformation: [
+          { quality: 'auto' },
+          { fetch_format: 'auto' },
+        ],
+      })
 
-      // Generate unique filename
-      const ext = path.extname(fileData.filename || '.jpg')
-      const filename = `${reportId}-${Date.now()}${ext}`
-      const filepath = path.join(uploadsDir, filename)
-
-      // Save file
-      await fs.writeFile(filepath, buffer)
-
-      // Create database record
+      // Create database record with Cloudinary URL
       const photo = await prisma.reportPhoto.create({
         data: {
           reportId,
-          url: `/uploads/${filename}`,
+          url: uploadResult.secure_url, // Use secure_url (HTTPS)
           caption,
         },
       })
@@ -135,13 +122,18 @@ export async function photosRoutes(app: FastifyInstance) {
         })
       }
 
-      // Delete file from filesystem
-      const filename = path.basename(photo.url)
-      const filepath = path.join(uploadsDir, filename)
-      try {
-        await fs.unlink(filepath)
-      } catch (err) {
-        app.log.warn(err, 'Failed to delete file from filesystem')
+      // Delete from Cloudinary if it's a Cloudinary URL
+      const publicId = extractPublicId(photo.url)
+      if (publicId) {
+        try {
+          await deleteFromCloudinary(publicId)
+        } catch (err) {
+          app.log.warn(err, 'Failed to delete file from Cloudinary')
+        }
+      } else {
+        // Legacy: Log warning if it's an old local URL
+        // This handles migration period
+        app.log.warn(`Photo ${id} has non-Cloudinary URL, skipping Cloudinary deletion`)
       }
 
       // Delete database record
