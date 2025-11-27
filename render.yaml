@@ -21,6 +21,8 @@ services:
         generateValue: true
       - key: LOG_LEVEL
         value: info
+      - key: CORS_ORIGIN
+        value: https://cira-frontend-nu.vercel.app
     disk:
       name: cira-uploads
       mountPath: /app/uploads

@@ -109,10 +109,13 @@ await app.register(cors, {
     }
     
     // In production, use allowed origins
-    const allowed = (process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean)) || [
-      'https://cira-frontend-nu.vercel.app/',
+    // Normalize origins by removing trailing slashes
+    const allowed = (process.env.CORS_ORIGIN?.split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean)) || [
+      'https://cira-frontend-nu.vercel.app',
     ]
-    if (!origin || allowed.includes(origin)) {
+    // Normalize incoming origin by removing trailing slash for comparison
+    const normalizedOrigin = origin?.replace(/\/$/, '') || ''
+    if (!origin || allowed.includes(normalizedOrigin)) {
       cb(null, true)
     } else {
       cb(new Error('Not allowed'), false)

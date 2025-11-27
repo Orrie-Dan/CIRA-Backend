@@ -271,9 +271,12 @@ export async function notificationsRoutes(app: FastifyInstance) {
   app.options('/notifications/stream', async (req, reply) => {
     const origin = req.headers.origin
     const isDevelopment = process.env.NODE_ENV !== 'production'
-    const allowedOrigins = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean) || ['https://cira-frontend-nu.vercel.app/']
+    // Normalize origins by removing trailing slashes
+    const allowedOrigins = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean) || ['https://cira-frontend-nu.vercel.app']
+    // Normalize incoming origin by removing trailing slash for comparison
+    const normalizedOrigin: string = origin ? origin.replace(/\/$/, '') : ''
     
-    if (isDevelopment || !origin || allowedOrigins.includes(origin)) {
+    if (isDevelopment || !origin || allowedOrigins.includes(normalizedOrigin)) {
       reply.header('Access-Control-Allow-Origin', origin || '*')
       reply.header('Access-Control-Allow-Credentials', 'true')
       reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -330,9 +333,12 @@ export async function notificationsRoutes(app: FastifyInstance) {
     // Set CORS headers explicitly for SSE (EventSource requires these)
     const origin = req.headers.origin
     const isDevelopment = process.env.NODE_ENV !== 'production'
-    const allowedOrigins = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim()).filter(Boolean) || ['https://cira-frontend-nu.vercel.app/']
+    // Normalize origins by removing trailing slashes
+    const allowedOrigins = process.env.CORS_ORIGIN?.split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean) || ['https://cira-frontend-nu.vercel.app']
+    // Normalize incoming origin by removing trailing slash for comparison
+    const normalizedOrigin: string = origin ? origin.replace(/\/$/, '') : ''
     
-    if (isDevelopment || !origin || allowedOrigins.includes(origin)) {
+    if (isDevelopment || !origin || allowedOrigins.includes(normalizedOrigin)) {
       reply.raw.setHeader('Access-Control-Allow-Origin', origin || '*')
       reply.raw.setHeader('Access-Control-Allow-Credentials', 'true')
       reply.raw.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
