@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserAccount {
+  id            String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String                @unique
+  passwordHash  String?               @map("password_hash") // Optional for OAuth users
+  fullName      String?               @map("full_name")
+  phone         String?
+  role          String                @default("citizen")
+  provider      String?               // 'google', 'apple', or null for email/password
+  providerId    String?               @map("provider_id") // OAuth provider's user ID
+  emailVerified Boolean               @default(false) @map("email_verified")
+  phoneVerified Boolean               @default(false) @map("phone_verified")
+  avatarUrl     String?               @map("avatar_url")
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  reports       Report[]
+  assignments   ReportAssignment[]
+  comments      ReportComment[]
+  statusChanges ReportStatusHistory[] @relation("StatusChangedBy")
+  notifications Notification[]
+  deviceTokens  DeviceToken[]
+  confirmations ReportConfirmation[]
+  preferences   UserPreferences?
+  auditLogs     AuditLog[]
+  qcSlipsCreated QcSlip[] @relation("QcSlipOfficer")
+  qcSlipsApproved QcSlip[] @relation("QcSlipApprover")
+
+  @@unique([provider, providerId])
+  @@map("user_account")
+}
+
+model Organization {
+  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String             @unique
+  contactEmail String?            @map("contact_email")
+  contactPhone String?            @map("contact_phone")
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  assignments  ReportAssignment[]
+
+  @@map("organization")
+}
+
+model Report {
+  id            String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporterId    String?               @map("reporter_id") @db.Uuid
+  title         String
+  description   String
+  type          String
+  severity      String
+  status        String                @default("new")
+  latitude      Decimal               @db.Decimal(9, 6)
+  longitude     Decimal               @db.Decimal(9, 6)
+  addressText   String?               @map("address_text")
+  province      String?
+  district      String?
+  sector        String?
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  reporter      UserAccount?          @relation(fields: [reporterId], references: [id], onUpdate: NoAction)
+  assignments   ReportAssignment[]
+  comments      ReportComment[]
+  photos        ReportPhoto[]
+  statusHistory ReportStatusHistory[]
+  confirmations ReportConfirmation[]
+  qcSlip        QcSlip?
+
+  @@map("report")
+}
+
+model ReportPhoto {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId  String   @map("report_id") @db.Uuid
+  url       String
+  caption   String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("report_photo")
+}
+
+model ReportStatusHistory {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId      String       @map("report_id") @db.Uuid
+  fromStatus    String?      @map("from_status")
+  toStatus      String       @map("to_status")
+  note          String?
+  changedBy     String?      @map("changed_by") @db.Uuid
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  changedByUser UserAccount? @relation("StatusChangedBy", fields: [changedBy], references: [id], onUpdate: NoAction)
+  report        Report       @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("report_status_history")
+}
+
+model ReportComment {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId  String       @map("report_id") @db.Uuid
+  authorId  String?      @map("author_id") @db.Uuid
+  body      String
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  author    UserAccount? @relation(fields: [authorId], references: [id], onUpdate: NoAction)
+  report    Report       @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("report_comment")
+}
+
+model ReportAssignment {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId       String        @map("report_id") @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  assigneeId     String?       @map("assignee_id") @db.Uuid
+  dueAt          DateTime?     @map("due_at") @db.Timestamptz(6)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  assignee       UserAccount?  @relation(fields: [assigneeId], references: [id], onUpdate: NoAction)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onUpdate: NoAction)
+  report         Report        @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("report_assignment")
+}
+
+model AdminUnit {
+  id       String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name     String
+  level    String
+  parentId String?     @map("parent_id") @db.Uuid
+  parent   AdminUnit?  @relation("AdminUnitParent", fields: [parentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  children AdminUnit[] @relation("AdminUnitParent")
+
+  @@map("admin_unit")
+}
+
+model Notification {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  type      String
+  title     String
+  body      String
+  data      Json?
+  read      Boolean     @default(false)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@map("notification")
+}
+
+model DeviceToken {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  token     String      @unique
+  platform  String
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user      UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+  @@map("device_token")
+}
+
+model ReportConfirmation {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId  String      @map("report_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  report    Report      @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([reportId, userId])
+  @@index([reportId])
+  @@index([userId])
+  @@map("report_confirmation")
+}
+
+model AuditLog {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String?     @map("user_id") @db.Uuid
+  action       String
+  resourceType String      @map("resource_type")
+  resourceId   String?     @map("resource_id") @db.Uuid
+  details      Json?
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  user         UserAccount? @relation(fields: [userId], references: [id], onUpdate: NoAction)
+
+  @@index([userId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+model UserPreferences {
+  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String      @unique @map("user_id") @db.Uuid
+  emailNotifications    Boolean     @default(true) @map("email_notifications")
+  pushNotifications     Boolean     @default(true) @map("push_notifications")
+  nearbyAlerts          Boolean     @default(true) @map("nearby_alerts")
+  language              String      @default("en")
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                  UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("user_preferences")
+}
+
+model QcSlip {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId      String      @unique @map("report_id") @db.Uuid
+  officerId     String      @map("officer_id") @db.Uuid
+  workSummary   String      @map("work_summary")
+  photos        String[]    // URLs of completion photos
+  approved      Boolean     @default(false)
+  approvedBy    String?     @map("approved_by") @db.Uuid
+  approvedAt    DateTime?   @map("approved_at") @db.Timestamptz(6)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  report        Report      @relation(fields: [reportId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  officer       UserAccount @relation("QcSlipOfficer", fields: [officerId], references: [id], onUpdate: NoAction)
+  approver      UserAccount? @relation("QcSlipApprover", fields: [approvedBy], references: [id], onUpdate: NoAction)
+
+  @@map("qc_slip")
+}

@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cira-api
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://cira_user:cira_password@db:5432/cira?schema=public
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - COOKIE_SECRET=${COOKIE_SECRET:-change-me-in-production}
+      - LOG_LEVEL=info
+      - API_URL=http://localhost:3001
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:8081
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  db:
+    image: postgres:16-alpine
+    container_name: cira-db
+    environment:
+      - POSTGRES_USER=cira_user
+      - POSTGRES_PASSWORD=cira_password
+      - POSTGRES_DB=cira
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cira_user -d cira"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
